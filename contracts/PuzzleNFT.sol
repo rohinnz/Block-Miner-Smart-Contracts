@@ -16,12 +16,12 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 error AlreadyMinted();
 
 /**
- * @dev Upgradeable ERC721 Contract for 20x14 tile puzzles
+ * @title Upgradeable ERC721 contract for 20x14 tile puzzles
  * 
  * @author Rohin Knight
  */
 contract PuzzleNFT is Initializable, ERC721Upgradeable, AccessControlUpgradeable, UUPSUpgradeable {
-	uint8 constant public DATA_SIZE = 4;
+	uint8 public constant DATA_SIZE = 4;
 	bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 	bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 	// Token counter for assigning id
@@ -45,10 +45,26 @@ contract PuzzleNFT is Initializable, ERC721Upgradeable, AccessControlUpgradeable
 	 */
 	uint256 public lastIdWithCID;
 
+	// ====================================== UUPS Upgradeable ======================================
+
 	/// @custom:oz-upgrades-unsafe-allow constructor
 	constructor() {
 			_disableInitializers();
 	}
+
+	function initialize(string calldata defaultURI) public initializer {
+		__ERC721_init("Block Miner Puzzle", "BMP");
+		__AccessControl_init();
+		__UUPSUpgradeable_init();
+
+		_grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+		_grantRole(MINTER_ROLE, msg.sender);
+		_grantRole(UPGRADER_ROLE, msg.sender);
+
+		_defaultURI = defaultURI;
+	}
+
+	function _authorizeUpgrade(address newImplementation) internal onlyRole(UPGRADER_ROLE) override {}
 
 	// ====================================== Public Functions ======================================
 
@@ -108,24 +124,6 @@ contract PuzzleNFT is Initializable, ERC721Upgradeable, AccessControlUpgradeable
 	}
 
 	// ====================================== Restricted Functions ======================================
-
-	function initialize(string calldata defaultURI) initializer public {
-		__ERC721_init("Block Miner Puzzle", "BMP");
-		__AccessControl_init();
-		__UUPSUpgradeable_init();
-
-		_grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-		_grantRole(MINTER_ROLE, msg.sender);
-		_grantRole(UPGRADER_ROLE, msg.sender);
-
-		_defaultURI = defaultURI;
-	}
-
-	function _authorizeUpgrade(address newImplementation)
-		internal
-		onlyRole(UPGRADER_ROLE)
-		override
-	{}
 
 	/** 
 	 * @dev Protocol is IPFS

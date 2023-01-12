@@ -6,7 +6,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-wit
 import { BigNumber, Contract } from "ethers";
 
 // eslint-disable-next-line node/no-missing-import
-import * as TestUtils from "./TestUtils";
+import * as TU from "./TestUtils";
 
 /**
  * Tests for Minting NFT Puzzles
@@ -16,10 +16,10 @@ import * as TestUtils from "./TestUtils";
 describe("PuzzleNFT", () => {
   // Set of tiles to use for creating the puzzle
   const tiles1 = [
-    [TestUtils.Tile.Ladder, TestUtils.Tile.Pickhammer],
-    [TestUtils.Tile.None, TestUtils.Tile.None],
+    [TU.Tile.SOFT_LADDER, TU.Tile.PICK],
+    [TU.Tile.NONE, TU.Tile.NONE],
   ];
-  let puzzleObj: TestUtils.Puzzle;
+  let puzzleObj: TU.Puzzle;
   let nftContract: Contract;
   let owner: SignerWithAddress;
   let addr1: SignerWithAddress;
@@ -40,18 +40,18 @@ describe("PuzzleNFT", () => {
     await nftContract.deployed();
 
     // Create puzzle obj that we can modify and encode for minting
-    puzzleObj = new TestUtils.Puzzle();
-    puzzleObj.tiles = TestUtils.createExpandedTiles(
+    puzzleObj = new TU.Puzzle();
+    puzzleObj.tiles = TU.createExpandedTiles(
       tiles1,
-      TestUtils.PUZZLE_WIDTH,
-      TestUtils.PUZZLE_HEIGHT,
-      TestUtils.Tile.Soft
+      TU.PUZZLE_W,
+      TU.PUZZLE_H,
+      TU.Tile.SOFT_BLOCK
     );
   });
 
   function encodePuzzle(variation: number): BigNumber[] {
     puzzleObj.playerX = variation;
-    return TestUtils.encodePuzzleTo4u256s(puzzleObj);
+    return TU.encodePuzzleTo4u256s(puzzleObj);
   }
 
   // ========================================== Tests ===========================================
