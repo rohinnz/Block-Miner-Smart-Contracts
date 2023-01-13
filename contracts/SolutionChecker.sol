@@ -28,7 +28,7 @@ error NotAtExit(uint8 playerX, uint playerY);
 
 /**
  * @title Solution checker contract for Puzzle NFTs
- * @notice This is contract is very expensive to run as a transaction.
+ * @notice This contract is very expensive to run as a transaction.
  * In order to use this on L1, we need to use an optimistic approach.
  *
  * Optimisitc Approach:
