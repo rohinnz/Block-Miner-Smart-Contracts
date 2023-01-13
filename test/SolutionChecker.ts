@@ -74,8 +74,14 @@ describe("Solution Checker", () => {
     const levelData = TU.encodePuzzleTo4u256s(level);
     await nftContract.safeMint(owner.address, levelData);
 
-    const encodedData = TU.getEncodedSolution(moveTypes, moveDirs);
-    await solutionChecker.test2xSolution(1, 1, 1, 1, 0, encodedData);
+    const encodedSolution = TU.getEncodedSolution(moveTypes, moveDirs);
+    const setupData = "011"; // <target crystals><end pos><start pos>
+
+    await solutionChecker.test2xSolution(
+      [1, 1, 1, 1],
+      setupData,
+      encodedSolution
+    );
   }
 
   // ========================================== Tests ===========================================

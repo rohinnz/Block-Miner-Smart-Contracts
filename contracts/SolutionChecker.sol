@@ -97,7 +97,7 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		uint256 prev;
 	}
 
-	PuzzleNFT private _nft;
+	PuzzleNFT private _puzzleNFT;
 
 	// ====================================== UUPS Upgradeable ======================================
 
@@ -106,10 +106,10 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		_disableInitializers();
 	}
 
-	function initialize(PuzzleNFT nft) public initializer {
+	function initialize(PuzzleNFT puzzleNFT) public initializer {
 		__Ownable_init();
 		__UUPSUpgradeable_init();
-		_nft = nft;
+		_puzzleNFT = puzzleNFT;
 	}
 
 	function _authorizeUpgrade(address newImplementation) internal onlyOwner override {}
@@ -121,18 +121,23 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	 * @notice Builds 2x Puzzle from 4 Puzzle Ids in the following layout:
 	 * <id1><id2>
 	 * <id3><id4>
+	 * 
+	 * Also we don't access Puzzle2xNFT contract directly because we may
+	 * need to test solutions for 2x puzzles that have not been minted.
 	 */
-	function test2xSolution(uint256 puzzleId1, uint256 puzzleId2, uint256 puzzleId3, uint256 puzzleId4,
-		uint8 targetCrystals, uint256[] calldata solution) external view
+	function test2xSolution(uint256[4] calldata puzzleIds, uint16 setupData, uint256[] calldata solution) external view
 	{
-		uint256[4] memory puzzle1 = _nft.getPuzzle(puzzleId1);
-		uint256[4] memory puzzle2 = _nft.getPuzzle(puzzleId2);
-		uint256[4] memory puzzle3 = _nft.getPuzzle(puzzleId3);
-		uint256[4] memory puzzle4 = _nft.getPuzzle(puzzleId4);
+		uint256[4] memory puzzle1 = _puzzleNFT.getPuzzle(puzzleIds[0]);
+		uint256[4] memory puzzle2 = _puzzleNFT.getPuzzle(puzzleIds[1]);
+		uint256[4] memory puzzle3 = _puzzleNFT.getPuzzle(puzzleIds[2]);
+		uint256[4] memory puzzle4 = _puzzleNFT.getPuzzle(puzzleIds[3]);
 
-		// Pick start and end based on puzzle 1 and 2 id numbers
-		uint8 startLvlIdx = uint8(puzzleId1 % 4);
-		uint8 exitLvlIdx = uint8(puzzleId2 % 4);
+		// Decode start, exit and target crystals
+		// For start and exit ids, mod final value
+		// by 4 to ensure idx within 0-3 range.
+		uint16 startLvlIdx = (setupData % 10) % 4;  
+		uint16 exitLvlIdx = (setupData % 100 / 10) % 4;
+		uint8 targetCrystals = uint8(setupData % 1000 / 100);
 
 		Puzzle memory puzzle2x;
 		puzzle2x.tiles = new uint8[][](PUZZLE_H_2X);
@@ -151,7 +156,7 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	 * Tests a Puzzle solution. Reverts if solution impossible.
 	 */
 	function testSolution(uint256 puzzleId, uint256[] calldata solution) external view {
-		uint256[4] memory level = _nft.getPuzzle(puzzleId);
+		uint256[4] memory level = _puzzleNFT.getPuzzle(puzzleId);
 		Puzzle memory lvl;
 		lvl.tiles = new uint8[][](PUZZLE_H);
 		for (uint i; i < PUZZLE_H; ++i) {
@@ -193,24 +198,24 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 			// If we've reached start of uint256 in solution array, move to next
 			if (mods.mod > MOD_LIMIT) {
-					mods.prev = 1;
-					mods.mod = 1;
-					++j;
+				mods.prev = 1;
+				mods.mod = 1;
+				++j;
 			}
 
 			// Process move
 			if (mType == MOVE) {
 				if (mDir == LEFT) {
-						--lvl.playerX;
+					--lvl.playerX;
 				}
 				else if (mDir == RIGHT) {
-						++lvl.playerX;
+					++lvl.playerX;
 				}
 				else if (mDir == UP) {
-						if (lvl.tiles[lvl.playerY][lvl.playerX] != SOFT_LADDER) {
-							revert CannotMoveUp(lvl.playerX, lvl.playerY);
-						}
-						--lvl.playerY;
+					if (lvl.tiles[lvl.playerY][lvl.playerX] != SOFT_LADDER) {
+						revert CannotMoveUp(lvl.playerX, lvl.playerY);
+					}
+					--lvl.playerY;
 				}
 				else { // mDir == DOWN
 					++lvl.playerY;
