@@ -28,7 +28,7 @@ contract Puzzle2xNFT is APuzzleNFT {
 	// Mapping token id to level
 	mapping(uint256 => PackedPuzzle) private _idsToData;
 
-	PuzzleNFT _puzzleNFT;
+	PuzzleNFT private _puzzleNFT;
 
 	// ====================================== UUPS Upgradeable ======================================
 	
@@ -86,7 +86,10 @@ contract Puzzle2xNFT is APuzzleNFT {
 	 * @dev Mints a Puzzle 2x NFT. Should only be called from authorized contract
 	 * todo: Write test for reentrancy attack on this function
 	 */
-	function safeMint(address to, uint256[NUM_PUZZLES] calldata puzzleIds, uint16 setup) public onlyRole(MINTER_ROLE) {
+	function safeMint(address to, uint256[NUM_PUZZLES] calldata puzzleIds, uint16 setup) public
+		onlyRole(MINTER_ROLE)
+		returns (uint256)
+	{
 		// Get data hash and revert if puzzle already minted
 		bytes32 puzzleHash = keccak256(abi.encodePacked(puzzleIds));
 		if (_hashesToIds[puzzleHash] != 0) revert AlreadyMinted();
@@ -108,6 +111,7 @@ contract Puzzle2xNFT is APuzzleNFT {
 		// Mint and emit event
 		_safeMint(to, id2x);
 		emit NewPuzzle(id2x);
+		return id2x;
 	}
 
 	// This function is a great candidate for inlining.

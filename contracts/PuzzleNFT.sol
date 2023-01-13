@@ -71,7 +71,10 @@ contract PuzzleNFT is APuzzleNFT {
 	 * @dev Mints a Puzzle NFT. Should only be called from authorized contract
 	 * todo: Write test for reentrancy attack on this function
 	 */
-	function safeMint(address to, uint256[DATA_SIZE] calldata data) public onlyRole(MINTER_ROLE) returns (uint256) {
+	function safeMint(address to, uint256[DATA_SIZE] calldata data) public
+		onlyRole(MINTER_ROLE)
+		returns (uint256)
+	{
 		// Get data hash and revert if puzzle already minted
 		bytes32 puzzleHash = keccak256(abi.encodePacked(data));
 		if (_hashesToIds[puzzleHash] != 0) revert AlreadyMinted();
