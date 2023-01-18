@@ -73,10 +73,11 @@ contract Puzzle2xNFT is APuzzleNFT {
 		puzzleIds = new uint256[NUM_PUZZLES][](ids2x.length);
 		setups = new uint16[](ids2x.length);
 
-		for (uint i = 0; i < ids2x.length; ++i) {
+		for (uint i; i < ids2x.length;) {
 			PackedPuzzle memory p = _idsToData[ids2x[i]];
 			puzzleIds[i] = p.puzzleIds;
 			setups[i] = p.setup;
+			unchecked{ ++i; }
 		}
 	}
 

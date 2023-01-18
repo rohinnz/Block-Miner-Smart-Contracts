@@ -92,11 +92,10 @@ abstract contract APuzzleNFT is Initializable, ERC721Upgradeable, AccessControlU
 	 * @dev Set CIDs, starting after the last ID set. CIDs should only be set once.
 	 */
 	function setCIDs(string[] calldata cids) external onlyRole(UPGRADER_ROLE) {
-		for (uint i = 0; i < cids.length; ++i) {
-			unchecked {
-				++lastIdWithCID;
-			}
+		for (uint i; i < cids.length;) {
+			unchecked { ++lastIdWithCID; }
 			_idsToCIDs[lastIdWithCID] = cids[i];
+			unchecked{ ++i; }
 		}
 	}
 

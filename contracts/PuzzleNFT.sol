@@ -60,8 +60,9 @@ contract PuzzleNFT is APuzzleNFT {
 	 */
 	function getPuzzles(uint256[] calldata ids) public view returns (uint256[DATA_SIZE][] memory nfts) {
 		nfts = new uint256[DATA_SIZE][](ids.length);
-		for (uint i = 0; i < ids.length; ++i) {
+		for (uint256 i; i < ids.length;) {
 			nfts[i] = _idsToData[ids[i]];
+			unchecked{ ++i; }
 		}
 	}
 

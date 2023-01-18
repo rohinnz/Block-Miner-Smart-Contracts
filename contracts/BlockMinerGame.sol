@@ -11,29 +11,33 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./PuzzleNFT.sol";
 import "./Puzzle2xNFT.sol";
 
-// todo: Make UUPS Upgradeable
 error NotNFTOwner();
-error WithdrawFailed(uint256 amount);
+error WithdrawFailed();
 error MintFeeNotMet(uint256 value, uint256 mintFee);
 
 /**
- * @title  Abstract base class for puzzle minter contract
+ * @title Main contract the client game will interact with.
+ * @dev Contract handles Treasury, NFT Minting and Competitions.
  * 
  * @author Rohin Knight
  */
 contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	uint256 public constant PUZZLE_DATA_SIZE = 4;
-	uint256 public constant PUZZLES_IN_NFT2x = 4;
+	uint256 public constant PUZZLES_IN_NFT2X = 4;
 	uint256 public mintFeeDev;
 	uint256 public mintFeeRewards;
 	uint256 public mintFeePerPuzzle;
 
+	uint256 public nftMintFee; // mintFeeDev + mintFeeRewards
+	uint256 public bigNftMintFee; // mintFeePerPuzzle * 4
+
 	event MintFeesUpdated();
 
-	mapping(uint256 => uint256) internal _nftBalances;
+	mapping(uint256 => uint256) internal _nftBalances;  // todo: Rename to _nftRoyalties
 	mapping(address => uint256) internal _bondBalances;
 	uint256 public ownerBalance;
 	uint256 public rewardsBalance;
+
 
 	Puzzle2xNFT internal _puzzle2xNFT;
 	PuzzleNFT internal _puzzleNFT;
@@ -64,13 +68,9 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		uint256 balance = _nftBalances[puzzleId];
 		_nftBalances[puzzleId] = 0;
 
-		// WARNING: The msg.sender.call must be last to prevent a reentrancy attack. 
-		// If another update line must come after then we must use a reentrancy
-		// guard modifier which will cost more gas.
-		//
-		// todo: Write test with reentrancy attack contract
+		// This call must be last to prevent a reentrancy attack.
 		(bool sent, ) = msg.sender.call{value: balance}("");
-		if (!sent) revert WithdrawFailed(balance);
+		if (!sent) revert WithdrawFailed();
 	}
 
 	function nftBalance(uint256 puzzleId) external view returns (uint256) {
@@ -91,15 +91,14 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		uint256 balance = _bondBalances[msg.sender];
 		_bondBalances[msg.sender] = 0;
 
-		// WARNING: The msg.sender.call must be last to prevent a reentrancy attack. 
-		// If another update line must come after then we must use a reentrancy
-		// guard modifier which will cost more gas.
-		//
-		// todo: Write test with reentrancy attack contract
+		// This call must be last to prevent a reentrancy attack.
 		(bool sent, ) = msg.sender.call{value: balance}("");
-		if (!sent) revert WithdrawFailed(balance);
+		if (!sent) revert WithdrawFailed();
 	}
 
+
+
+	/*
 	// Fee to mint NFT puzzle
 	function nftMintFee() public view returns (uint256) {
 		return mintFeeDev + mintFeeRewards;
@@ -107,8 +106,8 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 	// Fee to mint Big NFT puzzle
 	function bigNftMintFee() public view returns (uint256) {
-		return mintFeePerPuzzle * PUZZLES_IN_NFT2x;
-	}
+		return mintFeePerPuzzle * PUZZLES_IN_NFT2X;
+	}*/
 
 	/**
 	 * Called by game client to mint Puzzle NFT
@@ -123,7 +122,7 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	/**
 	 * @dev Called by game client to mint Puzzle 2x NFT
 	 */
-	function safeMint2x(uint256[PUZZLES_IN_NFT2x] calldata puzzleIds, uint16 setupData) external payable
+	function safeMint2x(uint256[PUZZLES_IN_NFT2X] calldata puzzleIds, uint16 setupData) external payable
 		returns (uint256)
 	{
 		_depositForPuzzle2x(puzzleIds);
@@ -133,9 +132,9 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	// ==================================== Restricted Functions ====================================
 
 	function ownerWithdraw(address to) external onlyOwner {
-		(bool sent, ) = to.call{value: ownerBalance}("");
-		if (!sent) revert WithdrawFailed(ownerBalance);
 		ownerBalance = 0;
+		(bool sent, ) = to.call{value: ownerBalance}("");
+		if (!sent) revert WithdrawFailed();
 	}
 
 	function setMintFees(uint256 devFee, uint256 rewardsFee, uint256 perPuzzleFee) external onlyOwner {
@@ -143,26 +142,36 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		mintFeeRewards = rewardsFee;
 		mintFeePerPuzzle = perPuzzleFee;
 
+		// Calculate NFT mint fees
+		unchecked {
+			nftMintFee = mintFeeDev + mintFeeRewards;
+			bigNftMintFee = mintFeePerPuzzle * PUZZLES_IN_NFT2X;
+		}
+
 		emit MintFeesUpdated();
 	}
 
 	// ===================================== Internal Functions =====================================
 
 	function _depositForPuzzle() internal {
-		if (msg.value != nftMintFee()) {
-			revert MintFeeNotMet(msg.value, nftMintFee());
+		if (msg.value != nftMintFee) {
+			revert MintFeeNotMet(msg.value, nftMintFee);
 		}
-		ownerBalance += mintFeeDev;
-		rewardsBalance += mintFeeRewards;
+		unchecked {
+			ownerBalance += mintFeeDev;
+			rewardsBalance += mintFeeRewards;
+		}
 	}
 
-	function _depositForPuzzle2x(uint256[PUZZLES_IN_NFT2x] calldata puzzleIds) internal {
-		if (msg.value != bigNftMintFee()) {
-			revert MintFeeNotMet(msg.value, bigNftMintFee());
+	function _depositForPuzzle2x(uint256[PUZZLES_IN_NFT2X] calldata puzzleIds) internal {
+		if (msg.value != bigNftMintFee) {
+			revert MintFeeNotMet(msg.value, bigNftMintFee);
 		}
-		_nftBalances[puzzleIds[0]] += mintFeePerPuzzle;
-		_nftBalances[puzzleIds[1]] += mintFeePerPuzzle;
-		_nftBalances[puzzleIds[2]] += mintFeePerPuzzle;
-		_nftBalances[puzzleIds[3]] += mintFeePerPuzzle;
+		unchecked {
+			_nftBalances[puzzleIds[0]] += mintFeePerPuzzle;
+			_nftBalances[puzzleIds[1]] += mintFeePerPuzzle;
+			_nftBalances[puzzleIds[2]] += mintFeePerPuzzle;
+			_nftBalances[puzzleIds[3]] += mintFeePerPuzzle;
+		}
 	}
 }

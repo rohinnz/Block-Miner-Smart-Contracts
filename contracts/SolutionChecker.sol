@@ -135,21 +135,24 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		// Decode start, exit and target crystals
 		// For start and exit ids, mod final value
 		// by 4 to ensure idx within 0-3 range.
-		uint16 startLvlIdx = (setupData % 10) % 4;  
-		uint16 exitLvlIdx = (setupData % 100 / 10) % 4;
-		uint8 targetCrystals = uint8(setupData % 1000 / 100);
+		unchecked {
+			uint16 startLvlIdx = (setupData % 10) % 4;  
+			uint16 exitLvlIdx = (setupData % 100 / 10) % 4;
+			uint8 targetCrystals = uint8(setupData % 1000 / 100);
 
-		Puzzle memory puzzle2x;
-		puzzle2x.tiles = new uint8[][](PUZZLE_H_2X);
-		for (uint i = 0; i < PUZZLE_H_2X; ++i) {
-			puzzle2x.tiles[i] = new uint8[](PUZZLE_W_2X);
+			Puzzle memory puzzle2x;
+			puzzle2x.tiles = new uint8[][](PUZZLE_H_2X);
+			for (uint i; i < PUZZLE_H_2X;) {
+				puzzle2x.tiles[i] = new uint8[](PUZZLE_W_2X);
+				++i;
+			}
+
+			_populatePuzzle(puzzle2x, puzzle1, 0, PUZZLE_W, 0, PUZZLE_H, startLvlIdx == 0, exitLvlIdx == 0);
+			_populatePuzzle(puzzle2x, puzzle2, PUZZLE_W, PUZZLE_W_2X, 0, PUZZLE_H, startLvlIdx == 1, exitLvlIdx == 1);
+			_populatePuzzle(puzzle2x, puzzle3, 0, PUZZLE_W, PUZZLE_H, PUZZLE_H_2X, startLvlIdx == 2, exitLvlIdx == 2);
+			_populatePuzzle(puzzle2x, puzzle4, PUZZLE_W, PUZZLE_W_2X, PUZZLE_H, PUZZLE_H_2X, startLvlIdx == 3, exitLvlIdx == 3);
+			_testPuzzleSolution(puzzle2x, solution, targetCrystals);
 		}
-
-		_populatePuzzle(puzzle2x, puzzle1, 0, PUZZLE_W, 0, PUZZLE_H, startLvlIdx == 0, exitLvlIdx == 0);
-		_populatePuzzle(puzzle2x, puzzle2, PUZZLE_W, PUZZLE_W_2X, 0, PUZZLE_H, startLvlIdx == 1, exitLvlIdx == 1);
-		_populatePuzzle(puzzle2x, puzzle3, 0, PUZZLE_W, PUZZLE_H, PUZZLE_H_2X, startLvlIdx == 2, exitLvlIdx == 2);
-		_populatePuzzle(puzzle2x, puzzle4, PUZZLE_W, PUZZLE_W_2X, PUZZLE_H, PUZZLE_H_2X, startLvlIdx == 3, exitLvlIdx == 3);
-		_testPuzzleSolution(puzzle2x, solution, targetCrystals);
 	}
 
 	/**
@@ -159,8 +162,9 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		uint256[4] memory level = _puzzleNFT.getPuzzle(puzzleId);
 		Puzzle memory lvl;
 		lvl.tiles = new uint8[][](PUZZLE_H);
-		for (uint i; i < PUZZLE_H; ++i) {
+		for (uint i; i < PUZZLE_H;) {
 			lvl.tiles[i] = new uint8[](PUZZLE_W);
+			unchecked{ ++i; }
 		}
 
 		_populatePuzzle(lvl, level, 0, PUZZLE_W, 0, PUZZLE_H, true, true);
@@ -185,83 +189,88 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		mods.mod = 1000;
 		mods.prev = 1000;
 
-		uint8 j = 0;
-		for (uint8 i = 0; i < numMoves; ++i) {
-			// Decode move type
-			mods.mod *= 10;
-			mType = uint8(solution[j] % mods.mod / mods.prev);
-			mods.prev = mods.mod;
-			// Decode move dir
-			mods.mod *= 10;
-			mDir = uint8(solution[j] % mods.mod / mods.prev);
-			mods.prev = mods.mod;
+		uint8 j;
+		uint8 i;
 
-			// If we've reached start of uint256 in solution array, move to next
-			if (mods.mod > MOD_LIMIT) {
-				mods.prev = 1;
-				mods.mod = 1;
-				++j;
-			}
+		unchecked {
+			while (i < numMoves) {
+				// Decode move type
+				mods.mod *= 10;
+				mType = uint8(solution[j] % mods.mod / mods.prev);
+				mods.prev = mods.mod;
+				// Decode move dir
+				mods.mod *= 10;
+				mDir = uint8(solution[j] % mods.mod / mods.prev);
+				mods.prev = mods.mod;
 
-			// Process move
-			if (mType == MOVE) {
-				if (mDir == LEFT) {
-					--lvl.playerX;
+				// If we've reached start of uint256 in solution array, move to next
+				if (mods.mod > MOD_LIMIT) {
+					mods.prev = 1;
+					mods.mod = 1;
+					++j;
 				}
-				else if (mDir == RIGHT) {
-					++lvl.playerX;
-				}
-				else if (mDir == UP) {
-					if (lvl.tiles[lvl.playerY][lvl.playerX] != SOFT_LADDER) {
-						revert CannotMoveUp(lvl.playerX, lvl.playerY);
+
+				// Process move
+				if (mType == MOVE) {
+					if (mDir == LEFT) {
+						--lvl.playerX;
 					}
-					--lvl.playerY;
+					else if (mDir == RIGHT) {
+						++lvl.playerX;
+					}
+					else if (mDir == UP) {
+						if (lvl.tiles[lvl.playerY][lvl.playerX] != SOFT_LADDER) {
+							revert CannotMoveUp(lvl.playerX, lvl.playerY);
+						}
+						--lvl.playerY;
+					}
+					else { // mDir == DOWN
+						++lvl.playerY;
+					}
 				}
-				else { // mDir == DOWN
-					++lvl.playerY;
+				else if (mType == MINE) {
+					// We we have picks for mining?
+					if (inv.picks < 1) revert NoPicks(lvl.playerX, lvl.playerY);
+					// What tile type are we mining?
+					(x, y) = _playerDirToXY(lvl, mDir);
+					tile = lvl.tiles[y][x];
+					// Add tile to inventory
+					if (tile == SOFT_BLOCK)				++inv.sTiles;
+					else if (tile == SOFT_LADDER) ++inv.ladders;
+					else revert										NothingToMine(x, y);
+					// Remove a pick and clear mined tile
+					--inv.picks;
+					lvl.tiles[y][x] = NONE;
 				}
-			}
-			else if (mType == MINE) {
-				// We we have picks for mining?
-				if (inv.picks < 1) revert NoPicks(lvl.playerX, lvl.playerY);
-				// What tile type are we mining?
-				(x, y) = _playerDirToXY(lvl, mDir);
-				tile = lvl.tiles[y][x];
-				// Add tile to inventory
-				if (tile == SOFT_BLOCK)				++inv.sTiles;
-				else if (tile == SOFT_LADDER) ++inv.ladders;
-				else revert										NothingToMine(x, y);
-				// Remove a pick and clear mined tile
-				--inv.picks;
-				lvl.tiles[y][x] = NONE;
-			}
-			else if (mType == PLACE_BLOCK) {
-				// Do we have soft blocks to palce?
-				if (inv.sTiles < 1) revert NoTileToPlace(SOFT_BLOCK, x, y);
-				// Is the location empty?
-				(x, y) = _playerDirToXY(lvl, mDir);
-				if (lvl.tiles[y][x] != NONE) revert CannotPlace(SOFT_BLOCK, x, y);
-				// Place block
-				--inv.sTiles;
-				lvl.tiles[y][x] = SOFT_BLOCK;
-			}
-			else if (mType == PLACE_LADDER) {
-				// Do we have ladders to place?
-				if (inv.ladders < 1) revert NoTileToPlace(SOFT_LADDER, x, y);
-				// Is the location empty?
-				(x, y) = _playerDirToXY(lvl, mDir);				
-				if (lvl.tiles[y][x] != NONE) revert CannotPlace(SOFT_LADDER, x, y);
-				// Place ladder
-				--inv.ladders;
-				lvl.tiles[y][x] = SOFT_LADDER;
-			}
+				else if (mType == PLACE_BLOCK) {
+					// Do we have soft blocks to palce?
+					if (inv.sTiles < 1) revert NoTileToPlace(SOFT_BLOCK, x, y);
+					// Is the location empty?
+					(x, y) = _playerDirToXY(lvl, mDir);
+					if (lvl.tiles[y][x] != NONE) revert CannotPlace(SOFT_BLOCK, x, y);
+					// Place block
+					--inv.sTiles;
+					lvl.tiles[y][x] = SOFT_BLOCK;
+				}
+				else if (mType == PLACE_LADDER) {
+					// Do we have ladders to place?
+					if (inv.ladders < 1) revert NoTileToPlace(SOFT_LADDER, x, y);
+					// Is the location empty?
+					(x, y) = _playerDirToXY(lvl, mDir);				
+					if (lvl.tiles[y][x] != NONE) revert CannotPlace(SOFT_LADDER, x, y);
+					// Place ladder
+					--inv.ladders;
+					lvl.tiles[y][x] = SOFT_LADDER;
+				}
 
-			// Did we move into a solid block?
-			if (_isSolid(lvl.tiles[lvl.playerY][lvl.playerX])) {
-				revert MovedIntoSolid(lvl.playerX, lvl.playerY);
-			}
+				// Did we move into a solid block?
+				if (_isSolid(lvl.tiles[lvl.playerY][lvl.playerX])) {
+					revert MovedIntoSolid(lvl.playerX, lvl.playerY);
+				}
 
-			_fallAndPickup(lvl, inv);
+				_fallAndPickup(lvl, inv);
+				++i;
+			}
 		}
 
 		// Are we at the exit and did we collect the target crystals?
@@ -278,54 +287,58 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	}
 
 	function _playerDirToXY(Puzzle memory lvl, uint8 dir) private pure returns (uint8, uint8) {
-		if      (dir == RIGHT)      return (lvl.playerX + 1, lvl.playerY    );
-		else if (dir == LEFT)       return (lvl.playerX - 1, lvl.playerY    );
-		else if (dir == UP)         return (lvl.playerX,     lvl.playerY - 1);
-		else if (dir == DOWN)       return (lvl.playerX,     lvl.playerY + 1);
-		else if (dir == RIGHT_UP)   return (lvl.playerX + 1, lvl.playerY - 1);
-		else if (dir == RIGHT_DOWN) return (lvl.playerX + 1, lvl.playerY + 1);
-		else if (dir == LEFT_UP)    return (lvl.playerX - 1, lvl.playerY - 1);
-		else         /* LEFT_DOWN */return (lvl.playerX - 1, lvl.playerY + 1);
+		unchecked {
+			if      (dir == RIGHT)      return (lvl.playerX + 1, lvl.playerY    );
+			else if (dir == LEFT)       return (lvl.playerX - 1, lvl.playerY    );
+			else if (dir == UP)         return (lvl.playerX,     lvl.playerY - 1);
+			else if (dir == DOWN)       return (lvl.playerX,     lvl.playerY + 1);
+			else if (dir == RIGHT_UP)   return (lvl.playerX + 1, lvl.playerY - 1);
+			else if (dir == RIGHT_DOWN) return (lvl.playerX + 1, lvl.playerY + 1);
+			else if (dir == LEFT_UP)    return (lvl.playerX - 1, lvl.playerY - 1);
+			else         /* LEFT_DOWN */return (lvl.playerX - 1, lvl.playerY + 1);
+		}
 	}
 	
 	function _fallAndPickup(Puzzle memory lvl, Inventory memory inv) private pure {
-		uint8 lastYBlock = uint8(lvl.tiles.length - 1);
-		uint8 tile = lvl.tiles[lvl.playerY][lvl.playerX];
+		unchecked {
+			uint8 lastYBlock = uint8(lvl.tiles.length - 1);
+			uint8 tile = lvl.tiles[lvl.playerY][lvl.playerX];
 
-		if (tile == SOFT_LADDER) return;
-		
-		// Pickup any items already touching
-		if (tile == PICK) {
-			++inv.picks;
-			lvl.tiles[lvl.playerY][lvl.playerX] = NONE;
-		}
-		else if (tile == CRYSTAL) {
-			++inv.crystals;
-			lvl.tiles[lvl.playerY][lvl.playerX] = NONE;
-		}
-
-		// Fall and pickup items
-		while (lvl.playerY < lastYBlock)
-		{
-			uint8 belowY = lvl.playerY + 1;
-			tile = lvl.tiles[belowY][lvl.playerX];
-
-			if (_canStandOn(tile)) return;
-
-			if (tile == PICK)
-			{
+			if (tile == SOFT_LADDER) return;
+			
+			// Pickup any items already touching
+			if (tile == PICK) {
 				++inv.picks;
-				lvl.tiles[belowY][lvl.playerX] = NONE;
+				lvl.tiles[lvl.playerY][lvl.playerX] = NONE;
 			}
 			else if (tile == CRYSTAL) {
 				++inv.crystals;
-				lvl.tiles[belowY][lvl.playerX] = NONE;
+				lvl.tiles[lvl.playerY][lvl.playerX] = NONE;
 			}
 
-			lvl.playerY = belowY;
-		}
+			// Fall and pickup items
+			while (lvl.playerY < lastYBlock)
+			{
+				uint8 belowY = lvl.playerY + 1;
+				tile = lvl.tiles[belowY][lvl.playerX];
+
+				if (_canStandOn(tile)) return;
+
+				if (tile == PICK)
+				{
+					++inv.picks;
+					lvl.tiles[belowY][lvl.playerX] = NONE;
+				}
+				else if (tile == CRYSTAL) {
+					++inv.crystals;
+					lvl.tiles[belowY][lvl.playerX] = NONE;
+				}
+
+				lvl.playerY = belowY;
+			}
+		} // unchecked
 	}
-		
+	
 	function _canStandOn(uint8 tile) private pure returns (bool) {
 		return tile == SOFT_BLOCK || tile == SOFT_LADDER;
 	}
@@ -343,20 +356,22 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	 *    10-13 |  3  |  4
 	 */
 	function _getNextObj(uint256[4] memory level, Mods memory mods) private pure returns (uint8 x, uint8 y) {
-		// Quadrant
-		mods.mod *= 10;
-		uint8 quadrant = uint8(level[3] % mods.mod / mods.prev);
-		mods.prev = mods.mod;
-		// Y
-		mods.mod *= 10;
-		y = uint8(level[3] %  mods.mod / mods.prev);
-		if (quadrant > 2 && y < 4) y += 10; // Ensure y not >= 14
-		mods.prev = mods.mod;
-		// X
-		mods.mod *= 10;
-		x = uint8(level[3] % mods.mod / mods.prev);
-		if (quadrant % 2 == 0) x += 10;
-		mods.prev = mods.mod;
+		unchecked {
+			// Quadrant
+			mods.mod *= 10;
+			uint8 quadrant = uint8(level[3] % mods.mod / mods.prev);
+			mods.prev = mods.mod;
+			// Y
+			mods.mod *= 10;
+			y = uint8(level[3] %  mods.mod / mods.prev);
+			if (quadrant > 2 && y < 4) y += 10; // Ensure y not >= 14
+			mods.prev = mods.mod;
+			// X
+			mods.mod *= 10;
+			x = uint8(level[3] % mods.mod / mods.prev);
+			if (quadrant % 2 == 0) x += 10;
+			mods.prev = mods.mod;
+		}
 	}
 
 	function _populatePuzzle(
@@ -367,46 +382,49 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		Mods memory mods;
 		mods.mod = 1;
 		mods.prev = 1;
-		uint8 i = 0;
+		uint8 i;
 		uint8 y;
 		uint8 x;
 		// Decode tiles
-		for (y = yStart; y < yEnd; ++y) {
-			for (x = xStart; x < xEnd; ++x) {
-				mods.mod *= 10;
-				clevel.tiles[y][x] = uint8(level[i] % mods.mod / mods.prev);
-				if (mods.mod > MOD_LIMIT) {
-					mods.prev = 1;
-					mods.mod = 1;
-					++i;
-				}
-				else {
-					mods.prev = mods.mod;
+		unchecked {
+			for (y = yStart; y < yEnd; ++y) {
+				for (x = xStart; x < xEnd; ++x) {
+					mods.mod *= 10;
+					clevel.tiles[y][x] = uint8(level[i] % mods.mod / mods.prev);
+					if (mods.mod > MOD_LIMIT) {
+						mods.prev = 1;
+						mods.mod = 1;
+						++i;
+					}
+					else {
+						mods.prev = mods.mod;
+					}
 				}
 			}
-		}
-		// Decode crystal xy
-		(x, y) = _getNextObj(level, mods);
-		clevel.tiles[y + yStart][x + xStart] = CRYSTAL;
-		// Decode player xy
-		if (useStart) {
+			
+			// Decode crystal xy
 			(x, y) = _getNextObj(level, mods);
-			clevel.playerX = x + xStart;
-			clevel.playerY = y + yStart;
-		}
-		else {
-			mods.mod *= 10;
-			mods.prev = mods.mod;
-		}
-		// Decode exit xy
-		if (useExit) {
-			(x, y) = _getNextObj(level, mods);
-			clevel.exitX = x + xStart;
-			clevel.exitY = y + yStart;
-		}
-		else {
-			mods.mod *= 10;
-			mods.prev = mods.mod;
-		}
+			clevel.tiles[y + yStart][x + xStart] = CRYSTAL;
+			// Decode player xy
+			if (useStart) {
+				(x, y) = _getNextObj(level, mods);
+				clevel.playerX = x + xStart;
+				clevel.playerY = y + yStart;
+			}
+			else {
+				mods.mod *= 10;
+				mods.prev = mods.mod;
+			}
+			// Decode exit xy
+			if (useExit) {
+				(x, y) = _getNextObj(level, mods);
+				clevel.exitX = x + xStart;
+				clevel.exitY = y + yStart;
+			}
+			else {
+				mods.mod *= 10;
+				mods.prev = mods.mod;
+			}
+		} // unchecked
 	}
 }
