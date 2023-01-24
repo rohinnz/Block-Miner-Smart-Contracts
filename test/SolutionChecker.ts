@@ -23,7 +23,7 @@ describe("Solution Checker", () => {
     [TU.Tile.NONE, TU.Tile.SOFT_BLOCK, TU.Tile.NONE, TU.Tile.PICK],
     [TU.Tile.SOFT_LADDER, TU.Tile.NONE, TU.Tile.SOFT_LADDER, TU.Tile.NONE],
   ];
-  let level: TU.Puzzle;
+  let puzzle: TU.Puzzle;
   let moveTypes: TU.MType[];
   let moveDirs: TU.MDir[];
   let owner: SignerWithAddress;
@@ -58,8 +58,8 @@ describe("Solution Checker", () => {
     );
     await solutionChecker.deployed();
 
-    level = new TU.Puzzle();
-    level.tiles = TU.createExpandedTiles(
+    puzzle = new TU.Puzzle();
+    puzzle.tiles = TU.createExpandedTiles(
       tiles1,
       TU.PUZZLE_W,
       TU.PUZZLE_H,
@@ -71,11 +71,11 @@ describe("Solution Checker", () => {
   });
 
   async function testSolution() {
-    const levelData = TU.encodePuzzleTo4u256s(level);
+    const levelData = TU.encodePuzzleTo4u256s(puzzle);
     await nftContract.safeMint(owner.address, levelData);
 
     const encodedSolution = TU.getEncodedSolution(moveTypes, moveDirs);
-    const setupData = "011"; // <target crystals><end pos><start pos>
+    const setupData = 11; // number with last 3 digits: <target crystals><end pos><start pos>
 
     await solutionChecker.test2xSolution(
       [1, 1, 1, 1],
@@ -94,16 +94,16 @@ describe("Solution Checker", () => {
     addMove(TU.MType.MOVE, TU.MDir.RIGHT);
     addMove(TU.MType.MOVE, TU.MDir.RIGHT);
 
-    level.setPlayer(1, 3);
-    level.setExit(3, 3);
+    puzzle.setPlayer(1, 3);
+    puzzle.setExit(3, 3);
     await testSolution();
   });
 
   it("Fall on solid", async () => {
     addMove(TU.MType.MOVE, TU.MDir.LEFT);
 
-    level.setPlayer(2, 0);
-    level.setExit(1, 1);
+    puzzle.setPlayer(2, 0);
+    puzzle.setExit(1, 1);
     await testSolution();
   });
 
@@ -112,8 +112,8 @@ describe("Solution Checker", () => {
     addMove(TU.MType.MOVE, TU.MDir.DOWN);
     addMove(TU.MType.MOVE, TU.MDir.RIGHT);
 
-    level.setPlayer(1, 1);
-    level.setExit(1, 3);
+    puzzle.setPlayer(1, 1);
+    puzzle.setExit(1, 3);
     await testSolution();
   });
 
@@ -125,8 +125,8 @@ describe("Solution Checker", () => {
     addMove(TU.MType.MOVE, TU.MDir.RIGHT);
     addMove(TU.MType.MOVE, TU.MDir.UP);
 
-    level.setPlayer(2, 0);
-    level.setExit(3, 0);
+    puzzle.setPlayer(2, 0);
+    puzzle.setExit(3, 0);
     await testSolution();
   });
 
@@ -142,8 +142,8 @@ describe("Solution Checker", () => {
     addMove(TU.MType.MOVE, TU.MDir.UP);
     addMove(TU.MType.MOVE, TU.MDir.UP);
 
-    level.setPlayer(2, 2);
-    level.setExit(0, 1);
+    puzzle.setPlayer(2, 2);
+    puzzle.setExit(0, 1);
     await testSolution();
   });
 });

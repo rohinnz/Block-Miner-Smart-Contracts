@@ -3,14 +3,17 @@
 pragma solidity 0.8.17;
 
 // Open Zeppelin Contracts
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 
 // Local Contracts
 import "./PuzzleNFT.sol";
 import "./Puzzle2xNFT.sol";
 
+// Custom Errors
 error NotNFTOwner();
 error WithdrawFailed();
 error MintFeeNotMet(uint256 value, uint256 mintFee);
@@ -21,7 +24,10 @@ error MintFeeNotMet(uint256 value, uint256 mintFee);
  * 
  * @author Rohin Knight
  */
-contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
+	bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+	bytes32 public constant COMPETITION_ROLE = keccak256("COMPETITION_ROLE");
+
 	uint256 public constant PUZZLE_DATA_SIZE = 4;
 	uint256 public constant PUZZLES_IN_NFT2X = 4;
 	uint256 public mintFeeDev;
@@ -33,14 +39,15 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 	event MintFeesUpdated();
 
-	mapping(uint256 => uint256) internal _nftBalances;  // todo: Rename to _nftRoyalties
-	mapping(address => uint256) internal _bondBalances;
+	mapping(uint256 => uint256) private _nftBalances;  // todo: Rename to _nftRoyalties
+	mapping(address => uint256) private _bondBalances;
+	mapping(address => uint256) private _lockedBondBalances;
+	mapping(address => uint256) private _prizePools;  // Rewards allocated per competition contract
 	uint256 public ownerBalance;
 	uint256 public rewardsBalance;
 
-
-	Puzzle2xNFT internal _puzzle2xNFT;
-	PuzzleNFT internal _puzzleNFT;
+	Puzzle2xNFT private _puzzle2xNFT;
+	PuzzleNFT private _puzzleNFT;
 
 	// ====================================== UUPS Upgradeable ======================================
 
@@ -50,13 +57,18 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	}
 
 	function initialize(PuzzleNFT puzzleNFT, Puzzle2xNFT puzzle2xNFT) public initializer {
-		__Ownable_init();
+		__AccessControl_init();
 		__UUPSUpgradeable_init();
+
+		_grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+		_grantRole(UPGRADER_ROLE, msg.sender);
+		_grantRole(COMPETITION_ROLE, msg.sender);
+
 		_puzzleNFT = puzzleNFT;
 		_puzzle2xNFT = puzzle2xNFT;
 	}
 
-	function _authorizeUpgrade(address newImplementation) internal onlyOwner override {}
+	function _authorizeUpgrade(address newImplementation) internal onlyRole(UPGRADER_ROLE) override {}
 
 	// ====================================== Public Functions ======================================
 
@@ -81,33 +93,22 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		return _bondBalances[msg.sender];
 	}
 
+	function lockedBondBalance() external view returns (uint256) {
+		return _lockedBondBalances[msg.sender];
+	}
+
 	function depositBond() external payable {
 		_bondBalances[msg.sender] += msg.value;
 	}
 
 	function withdrawBond() external {
-		// todo: Check if account's bond is currently locked
-
-		uint256 balance = _bondBalances[msg.sender];
-		_bondBalances[msg.sender] = 0;
+		uint256 amount = _bondBalances[msg.sender] - _lockedBondBalances[msg.sender];
+		_bondBalances[msg.sender] -= amount;
 
 		// This call must be last to prevent a reentrancy attack.
-		(bool sent, ) = msg.sender.call{value: balance}("");
+		(bool sent, ) = msg.sender.call{value: amount}("");
 		if (!sent) revert WithdrawFailed();
 	}
-
-
-
-	/*
-	// Fee to mint NFT puzzle
-	function nftMintFee() public view returns (uint256) {
-		return mintFeeDev + mintFeeRewards;
-	}
-
-	// Fee to mint Big NFT puzzle
-	function bigNftMintFee() public view returns (uint256) {
-		return mintFeePerPuzzle * PUZZLES_IN_NFT2X;
-	}*/
 
 	/**
 	 * Called by game client to mint Puzzle NFT
@@ -131,13 +132,13 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 	// ==================================== Restricted Functions ====================================
 
-	function ownerWithdraw(address to) external onlyOwner {
+	function ownerWithdraw(address to) external onlyRole(UPGRADER_ROLE) {
 		ownerBalance = 0;
 		(bool sent, ) = to.call{value: ownerBalance}("");
 		if (!sent) revert WithdrawFailed();
 	}
 
-	function setMintFees(uint256 devFee, uint256 rewardsFee, uint256 perPuzzleFee) external onlyOwner {
+	function setMintFees(uint256 devFee, uint256 rewardsFee, uint256 perPuzzleFee) external onlyRole(UPGRADER_ROLE) {
 		mintFeeDev = devFee;
 		mintFeeRewards = rewardsFee;
 		mintFeePerPuzzle = perPuzzleFee;
@@ -151,9 +152,26 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		emit MintFeesUpdated();
 	}
 
+	function lockBond(uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		_lockedBondBalances[msg.sender] += amount;
+		assert(_lockedBondBalances[msg.sender] <= _bondBalances[msg.sender]);
+	}
+
+	function unlockBond(uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		_lockedBondBalances[msg.sender] -= amount; // Will throw exception if underflow attempted
+	}
+
+	function payBondTo(address bondOwner, address recipient, uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		_lockedBondBalances[bondOwner] -= amount;  // Will throw exception if underflow attempted
+		_bondBalances[bondOwner] -= amount;
+
+		(bool sent, ) = recipient.call{value: amount}("");
+		if (!sent) revert WithdrawFailed();
+	}
+
 	// ===================================== Internal Functions =====================================
 
-	function _depositForPuzzle() internal {
+	function _depositForPuzzle() private {
 		if (msg.value != nftMintFee) {
 			revert MintFeeNotMet(msg.value, nftMintFee);
 		}
@@ -163,7 +181,7 @@ contract BlockMinerGame is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 		}
 	}
 
-	function _depositForPuzzle2x(uint256[PUZZLES_IN_NFT2X] calldata puzzleIds) internal {
+	function _depositForPuzzle2x(uint256[PUZZLES_IN_NFT2X] calldata puzzleIds) private {
 		if (msg.value != bigNftMintFee) {
 			revert MintFeeNotMet(msg.value, bigNftMintFee);
 		}

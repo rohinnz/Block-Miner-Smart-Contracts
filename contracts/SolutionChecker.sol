@@ -10,13 +10,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 // Local Contracts
 import "./PuzzleNFT.sol";
 
-// todo:
-// 1. Add more tests to ensure enough coverage.
-// 2. Then optimise for cheaper gas costs
-//    a. Use storage and memory correctly
-//    a. Use unchecked
-//    b. Check if shift operator cheaper than mods
-
+// Custom Errors
 error NoTileToPlace(uint8 tile, uint8 atX, uint8 atY);
 error CannotPlace(uint8 tile, uint8 atX, uint8 atY);
 error CannotMoveUp(uint8 toX, uint toY);
@@ -25,6 +19,13 @@ error NothingToMine(uint8 atX, uint8 atY);
 error MovedIntoSolid(uint8 playerX, uint playerY);
 error NotEnoughCrystals(uint8 crystals, uint8 targetCrystals);
 error NotAtExit(uint8 playerX, uint playerY);
+
+// todo:
+// 1. Add more tests to ensure enough coverage.
+// 2. Then optimise for cheaper gas costs
+//    a. Use storage and memory correctly
+//    a. Use unchecked
+//    b. Check if shift operator cheaper than mods
 
 /**
  * @title Solution checker contract for Puzzle NFTs
@@ -117,6 +118,60 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 	// ====================================== Public Functions ======================================
 
 	/**
+	 * Tests a Puzzle solution. Returns true if possible, or false if impossible. Should not throw any errors/exceptions.
+	 */
+	function testSolutionBool(uint256 puzzleId, uint256[] calldata solution)
+		external view returns (bool)
+	{
+		try this.testSolution(puzzleId, solution) {
+			return true;
+		}
+		catch Error(string memory /*reason*/)
+		{
+			return false;
+		}
+		catch (bytes memory /*lowLevelData*/)
+		{
+			return false;
+		}
+	}
+
+	/**
+	 * @dev Tests a 2x Puzzle solution. Returns true if possible, or false if impossible. Should not throw any errors/exceptions.
+	 */
+	function test2xSolutionBool(uint256[4] calldata puzzleIds, uint16 setupData, uint256[] calldata solution)
+		external view returns (bool)
+	{
+		try this.test2xSolution(puzzleIds, setupData, solution) {
+			return true;
+		}
+		catch Error(string memory /*reason*/)
+		{
+			return false;
+		}
+		catch (bytes memory /*lowLevelData*/)
+		{
+			return false;
+		}
+	}
+
+	/**
+	 * Tests a Puzzle solution. Reverts if solution impossible.
+	 */
+	function testSolution(uint256 puzzleId, uint256[] calldata solution) external view {
+		uint256[4] memory level = _puzzleNFT.getPuzzle(puzzleId);
+		Puzzle memory lvl;
+		lvl.tiles = new uint8[][](PUZZLE_H);
+		for (uint i; i < PUZZLE_H;) {
+			lvl.tiles[i] = new uint8[](PUZZLE_W);
+			unchecked{ ++i; }
+		}
+
+		_populatePuzzle(lvl, level, 0, PUZZLE_W, 0, PUZZLE_H, true, true);
+		_testPuzzleSolution(lvl, solution, 1);
+	}
+
+	/**
 	 * @dev Tests a 2x Puzzle solution. Reverts if solution impossible.
 	 * @notice Builds 2x Puzzle from 4 Puzzle Ids in the following layout:
 	 * <id1><id2>
@@ -153,22 +208,6 @@ contract SolutionChecker is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 			_populatePuzzle(puzzle2x, puzzle4, PUZZLE_W, PUZZLE_W_2X, PUZZLE_H, PUZZLE_H_2X, startLvlIdx == 3, exitLvlIdx == 3);
 			_testPuzzleSolution(puzzle2x, solution, targetCrystals);
 		}
-	}
-
-	/**
-	 * Tests a Puzzle solution. Reverts if solution impossible.
-	 */
-	function testSolution(uint256 puzzleId, uint256[] calldata solution) external view {
-		uint256[4] memory level = _puzzleNFT.getPuzzle(puzzleId);
-		Puzzle memory lvl;
-		lvl.tiles = new uint8[][](PUZZLE_H);
-		for (uint i; i < PUZZLE_H;) {
-			lvl.tiles[i] = new uint8[](PUZZLE_W);
-			unchecked{ ++i; }
-		}
-
-		_populatePuzzle(lvl, level, 0, PUZZLE_W, 0, PUZZLE_H, true, true);
-		_testPuzzleSolution(lvl, solution, 1);
 	}
 	
 	// ====================================== Restricted Functions ======================================
