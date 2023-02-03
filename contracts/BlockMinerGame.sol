@@ -34,12 +34,12 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 	uint256 public mintFeeRewards;
 	uint256 public mintFeePerPuzzle;
 
-	uint256 public nftMintFee; // mintFeeDev + mintFeeRewards
-	uint256 public bigNftMintFee; // mintFeePerPuzzle * 4
+	uint256 public nftMintFee;    // Cache for mintFeeDev + mintFeeRewards
+	uint256 public bigNftMintFee; // Cache for mintFeePerPuzzle * 4
 
 	event MintFeesUpdated();
 
-	mapping(uint256 => uint256) private _nftBalances;  // todo: Rename to _nftRoyalties
+	mapping(uint256 => uint256) private _nftRoyalties;
 	mapping(address => uint256) private _bondBalances;
 	mapping(address => uint256) private _lockedBondBalances;
 	mapping(address => uint256) private _prizePools;  // Rewards allocated per competition contract
@@ -77,8 +77,8 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 			revert NotNFTOwner();
 		}
 
-		uint256 balance = _nftBalances[puzzleId];
-		_nftBalances[puzzleId] = 0;
+		uint256 balance = _nftRoyalties[puzzleId];
+		_nftRoyalties[puzzleId] = 0;
 
 		// This call must be last to prevent a reentrancy attack.
 		(bool sent, ) = msg.sender.call{value: balance}("");
@@ -86,7 +86,7 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 	}
 
 	function nftBalance(uint256 puzzleId) external view returns (uint256) {
-		return _nftBalances[puzzleId];
+		return _nftRoyalties[puzzleId];
 	}
 
 	function bondBalance() external view returns (uint256) {
@@ -186,10 +186,10 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 			revert MintFeeNotMet(msg.value, bigNftMintFee);
 		}
 		unchecked {
-			_nftBalances[puzzleIds[0]] += mintFeePerPuzzle;
-			_nftBalances[puzzleIds[1]] += mintFeePerPuzzle;
-			_nftBalances[puzzleIds[2]] += mintFeePerPuzzle;
-			_nftBalances[puzzleIds[3]] += mintFeePerPuzzle;
+			_nftRoyalties[puzzleIds[0]] += mintFeePerPuzzle;
+			_nftRoyalties[puzzleIds[1]] += mintFeePerPuzzle;
+			_nftRoyalties[puzzleIds[2]] += mintFeePerPuzzle;
+			_nftRoyalties[puzzleIds[3]] += mintFeePerPuzzle;
 		}
 	}
 }

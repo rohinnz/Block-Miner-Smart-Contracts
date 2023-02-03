@@ -59,9 +59,6 @@ abstract contract APuzzleNFT is Initializable, ERC721Upgradeable, AccessControlU
 	function tokenURI(uint256 id) public view virtual override returns (string memory) {
 		_requireMinted(id);
 		string memory cid = _idsToCIDs[id];
-
-		// todo: find out if there is a performance difference between string.concat and abi.encodePacked
-		// probably doesn't matter that much as this function is unlikely to get called in a transaction.
 		return bytes(cid).length != 0 ? string.concat(_baseURI(), cid) : _defaultURI;
 	}
 
