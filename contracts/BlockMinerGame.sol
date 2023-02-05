@@ -42,7 +42,7 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 	mapping(uint256 => uint256) private _nftRoyalties;
 	mapping(address => uint256) private _bondBalances;
 	mapping(address => uint256) private _lockedBondBalances;
-	mapping(address => uint256) private _prizePools;  // Rewards allocated per competition contract
+	mapping(address => uint256) private _competitionRewards;  // Rewards allocated per competition contract
 	uint256 public ownerBalance;
 	uint256 public rewardsBalance;
 
@@ -87,6 +87,10 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 
 	function nftBalance(uint256 puzzleId) external view returns (uint256) {
 		return _nftRoyalties[puzzleId];
+	}
+
+	function availableBond() public view returns (uint256) {
+		return _bondBalances[msg.sender] - _lockedBondBalances[msg.sender];
 	}
 
 	function bondBalance() external view returns (uint256) {
@@ -152,19 +156,40 @@ contract BlockMinerGame is Initializable, AccessControlUpgradeable, UUPSUpgradea
 		emit MintFeesUpdated();
 	}
 
-	function lockBond(uint256 amount) public onlyRole(COMPETITION_ROLE) {
-		_lockedBondBalances[msg.sender] += amount;
-		assert(_lockedBondBalances[msg.sender] <= _bondBalances[msg.sender]);
+	function lockBond(address bondOwner, uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		unchecked {
+			_lockedBondBalances[bondOwner] += amount;
+		}
+		assert(_lockedBondBalances[bondOwner] <= _bondBalances[bondOwner]);
 	}
 
-	function unlockBond(uint256 amount) public onlyRole(COMPETITION_ROLE) {
-		_lockedBondBalances[msg.sender] -= amount; // Will throw exception if underflow attempted
+	function unlockBond(address bondOwner, uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		_lockedBondBalances[bondOwner] -= amount; // Will throw exception if underflow attempted
 	}
 
-	function payBondTo(address bondOwner, address recipient, uint256 amount) public onlyRole(COMPETITION_ROLE) {
+	function payBondTo(address recipient, address bondOwner, uint256 amount) public onlyRole(COMPETITION_ROLE) {
 		_lockedBondBalances[bondOwner] -= amount;  // Will throw exception if underflow attempted
 		_bondBalances[bondOwner] -= amount;
 
+		(bool sent, ) = recipient.call{value: amount}("");
+		if (!sent) revert WithdrawFailed();
+	}
+
+	function allocatePrize(uint256 amount) public onlyRole(COMPETITION_ROLE) {
+		rewardsBalance -= amount;
+		_competitionRewards[msg.sender] += amount;
+	}
+
+	function deallocatePrize() public onlyRole(COMPETITION_ROLE) {
+		rewardsBalance -= _competitionRewards[msg.sender];
+		_competitionRewards[msg.sender] = 0;
+	}
+
+	function rewardPrizeTo(address recipient) public onlyRole(COMPETITION_ROLE) {
+		uint256 amount = _competitionRewards[msg.sender];
+		_competitionRewards[msg.sender] = 0;
+
+		// This call must be last to prevent a reentrancy attack.
 		(bool sent, ) = recipient.call{value: amount}("");
 		if (!sent) revert WithdrawFailed();
 	}
