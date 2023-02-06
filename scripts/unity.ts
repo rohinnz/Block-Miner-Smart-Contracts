@@ -21,18 +21,19 @@ export function updateUnitySmartContract(
   const jsonStr = fs.readFileSync(jsonFilepath);
 
   // Convert JSON to Object so we can access the ABI object
-  const jsonObj = JSON.parse(jsonStr);
+  const jsonObj = JSON.parse(jsonStr.toString());
 
   // Convert ABI object back into JSON using stringify so there is no whitespace
   const abi = JSON.stringify(jsonObj.abi);
 
+  // Create export dir if not exist
+  if (!fs.existsSync(exportDir)) {
+    console.log("Created directory %s", exportDir);
+    fs.mkdirSync(exportDir, { recursive: true });
+  }
+
   // Setup export filepath and content
-  const exportFilepath = path.join(
-    __dirname,
-    exportDir,
-    networkName,
-    `${contractName}.asset`
-  );
+  const exportFilepath = path.join(exportDir, `${contractName}.asset`);
   const yamlFile = `%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000

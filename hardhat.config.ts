@@ -45,11 +45,18 @@ const config: HardhatUserConfig = {
     },
     goerli: {
       url: `https://eth-goerli.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-      accounts: [process.env.GOERLI_PRIVATE_KEY],
+      accounts: [
+        process.env.GOERLI_PRIVATE_KEY !== undefined
+          ? process.env.GOERLI_PRIVATE_KEY
+          : "",
+      ],
     },
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS,
+    enabled:
+      process.env.REPORT_GAS !== undefined
+        ? process.env.REPORT_GAS === "true"
+        : true,
     currency: "USD",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
   },

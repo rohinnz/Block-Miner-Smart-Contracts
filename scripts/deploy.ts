@@ -4,6 +4,7 @@ import { BaseContract } from "ethers";
 import { ethers, network, upgrades } from "hardhat";
 // eslint-disable-next-line node/no-missing-import
 import { updateUnitySmartContract } from "./unity";
+import * as path from "path";
 
 /**
  * Deploy contracts and update ABIs references in Unity
@@ -54,23 +55,13 @@ async function main() {
     solutionCheckerContract.address,
     COMPETITION_BOND,
   ]);
-
-  // Update Unity assets
-  if (network.name === "goerli" || network.name === "mainnet") {
-    const exportDir = "../../unity/BlockMiner/Assets/Data/";
-    updateUnitySmartContract(
-      network.name,
-      "PuzzleNFT",
-      puzzleNFTContract.address,
-      exportDir
-    );
-  }
 }
 
 async function deployUpgradableContract(
   contractName: string,
   args: unknown[] = []
 ): Promise<BaseContract> {
+  // Deploy Contract
   const factory = await ethers.getContractFactory(contractName);
   const contract = await upgrades.deployProxy(factory, args, { kind: "uups" });
   await contract.deployed();
@@ -80,6 +71,22 @@ async function deployUpgradableContract(
     contract.address,
     args
   );
+
+  // Update Unity Asset
+  if (process.env.UNITY_PROJECT_DIR !== undefined) {
+    const exportDir = path.join(
+      process.env.UNITY_PROJECT_DIR,
+      "Assets/Data",
+      network.name
+    );
+    updateUnitySmartContract(
+      network.name,
+      contractName,
+      contract.address,
+      exportDir
+    );
+  }
+
   return contract;
 }
 
