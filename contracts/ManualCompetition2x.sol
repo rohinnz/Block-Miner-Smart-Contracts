@@ -50,8 +50,8 @@ contract ManualCompetition2x is Initializable, OwnableUpgradeable, UUPSUpgradeab
 	Solution public currentSolution;
 
 	uint256 public requiredBond;
-	uint256 public compDur = 1 hours;
-	uint256 public testDur = 15 minutes;
+	uint256 public compDur;
+	uint256 public testDur;
 
 	BlockMinerGame private _blockMinerGame;
 	SolutionChecker private _solutionChecker;
@@ -69,6 +69,8 @@ contract ManualCompetition2x is Initializable, OwnableUpgradeable, UUPSUpgradeab
 		_blockMinerGame = game;
 		_solutionChecker = solutionChecker;
 		requiredBond = bond;
+		compDur = 1 hours;
+		testDur = 15 minutes;
 	}
 
 	function _authorizeUpgrade(address newImplementation) internal onlyOwner override {}
